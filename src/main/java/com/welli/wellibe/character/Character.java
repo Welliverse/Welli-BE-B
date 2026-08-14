@@ -35,4 +35,19 @@ public class Character {
     protected void updateTime() {
         this.updatedAt = LocalDateTime.now();
     }
+    public void updateCondition(int conditionScore) {
+        this.conditionScore = Math.max(0, Math.min(100, conditionScore));
+
+        if (this.conditionScore >= 80) {
+            this.appearanceState = "VERY_GOOD";
+        } else if (this.conditionScore >= 60) {
+            this.appearanceState = "GOOD";
+        } else if (this.conditionScore >= 40) {
+            this.appearanceState = "NORMAL";
+        } else if (this.conditionScore >= 20) {
+            this.appearanceState = "BAD";
+        } else {
+            this.appearanceState = "VERY_BAD";
+        }
+    }
 }
