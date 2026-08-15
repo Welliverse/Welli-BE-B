@@ -39,3 +39,8 @@ out/
 src/main/resources/application.yml
 
 uploads/
+
+### .env ###
+*.env
+
+*.properties
