@@ -1,0 +1,43 @@
+# Env file is named "welli.env" (not ".env"), so Compose won't auto-load it.
+# Always run: docker compose --env-file welli.env <command>
+#
+# This compose file assumes DB_USERNAME=root in welli.env (matches MYSQL_ROOT_PASSWORD below).
+# If you want a non-root DB user instead, add MYSQL_USER/MYSQL_PASSWORD to the mysql
+# service and set DB_USERNAME to that user's name.
+services:
+  app:
+    image: ghcr.io/welliverse/welli-be-b:latest
+    container_name: welli-app
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/welli?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - uploads_data:/app/uploads
+
+  mysql:
+    image: mysql:8.0
+    container_name: welli-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: welli
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mysql_data:
+  uploads_data:
