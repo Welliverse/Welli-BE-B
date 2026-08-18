@@ -157,7 +157,46 @@ http://<서버IP>:8080/swagger-ui/index.html
 접속이 안 되면 가비아 콘솔의 보안그룹/방화벽에서 **8080 포트 인바운드**가
 열려 있는지 확인하세요 (22번 SSH와는 별도로 열어야 합니다).
 
-## 7. 자주 발생하는 문제
+## 7. 서버 DB 직접 조회
+
+MySQL 컨테이너는 보안을 위해 3306 포트를 호스트/외부에 노출하지 않습니다.
+조회는 컨테이너 안으로 직접 들어가서 합니다.
+
+```bash
+docker exec -it welli-mysql mysql -u root -p welli
+```
+비밀번호 프롬프트에는 `welli.env`의 `DB_PASSWORD`를 입력합니다. 직접 타이핑하다
+오타 낼 걱정이 없게 하려면, 컨테이너에 저장된 값을 그대로 쓰는 방식도 가능합니다.
+```bash
+docker exec -it welli-mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" welli'
+```
+
+> **주의**: MySQL 컨테이너는 **최초 실행 시 볼륨이 비어있을 때만**
+> `MYSQL_ROOT_PASSWORD`(=`welli.env`의 `DB_PASSWORD`)로 root 계정을 초기화합니다.
+> 이후 `welli.env`의 `DB_PASSWORD`를 바꿔도 이미 생성된 DB 계정 비밀번호는
+> 자동으로 바뀌지 않으니, **root 비밀번호는 항상 "컨테이너를 맨 처음 띄웠을
+> 때 welli.env에 있던 값"** 이라는 점을 기억하세요.
+
+접속 후 자주 쓰는 조회:
+```sql
+SHOW TABLES;
+SELECT * FROM users;
+SELECT * FROM analysis_results ORDER BY id DESC LIMIT 20;
+```
+
+GUI 툴(DBeaver, MySQL Workbench 등)로 조회하고 싶다면, SSH 터널을 통해 접속합니다.
+```bash
+ssh -i welliKeyPair.pem -L 3306:localhost:3306 ubuntu@1.201.116.47
+```
+단 이 방식을 쓰려면 `docker-compose.yml`의 `mysql` 서비스에 호스트 로컬에만
+바인딩되는 포트 매핑이 필요합니다 (외부 공인 IP로는 계속 안 열리고, SSH
+터널을 거쳐야만 접근되므로 안전합니다). 필요하면 아래를 `mysql` 서비스에 추가:
+```yaml
+    ports:
+      - "127.0.0.1:3306:3306"
+```
+
+## 8. 자주 발생하는 문제
 
 | 증상 | 원인 | 해결 |
 |---|---|---|
@@ -165,3 +204,76 @@ http://<서버IP>:8080/swagger-ui/index.html
 | `docker compose pull`에서 `unauthorized` | 이미지는 있는데 인증 안 됨 (private) | 5-3의 PAT 로그인 진행, 또는 패키지 Public 전환 |
 | GitHub Actions는 success인데 컨테이너가 안 떠있음 | SSH 스크립트 중간 명령 실패가 마지막 명령 성공에 가려짐 | 서버에서 `docker compose --env-file welli.env pull`을 직접 실행해 실제 에러 확인 |
 | `'url' must start with "jdbc"` 에러로 앱/테스트 실패 | `welli.env`의 값이 실제 환경변수로 주입 안 됨 | 로컬은 IntelliJ EnvFile 플러그인 연결 확인, 터미널은 `export` 필요, 서버는 `--env-file welli.env` 필요 |
+| `docker exec`로 mysql 접속 시 `Access denied for user 'root'@'localhost'` | 비밀번호 오타, 또는 컨테이너 최초 생성 이후 `welli.env`의 `DB_PASSWORD`만 바꾸고 컨테이너는 재생성 안 함 | 위 7번의 `$MYSQL_ROOT_PASSWORD` 방식으로 재시도. 그래도 안 되면 최초 생성 당시 비밀번호가 뭐였는지 확인하거나, 테스트 데이터라면 볼륨(`welli_mysql_data`) 삭제 후 재생성 |
+
+## 9. (예정) 도메인 연결 및 HTTPS 전환
+
+현재는 `http://1.201.116.47:8080`처럼 IP + 포트로 직접 서비스하고 있습니다.
+**프론트팀 배포(Vercel/Netlify 등 HTTPS)가 완료되면**, 브라우저의 Mixed
+Content 정책 때문에 백엔드도 HTTPS로 응답해야 프론트에서 정상 호출할 수
+있습니다. 프론트 배포 일정이 잡히면 아래 순서로 진행합니다.
+
+### 8-1. 도메인 준비
+- 가비아에서 도메인 구매(가비아는 원래 도메인 등록 서비스가 주력이라 절차가
+  간단함) 또는 팀에서 이미 보유한 도메인 사용
+- API용 서브도메인 하나 결정 (예: `api.welli.com`)
+
+### 8-2. DNS 연결
+- 도메인 관리 콘솔(가비아 My가비아 등)에서 A 레코드 추가
+  - 호스트: `api` (서브도메인)
+  - 값: `1.201.116.47` (서버 공인 IP)
+- 전파까지 최대 몇 시간 걸릴 수 있음, `dig api.welli.com` 또는
+  `nslookup api.welli.com`으로 확인 가능
+
+### 8-3. 가비아 보안그룹에 80번 포트 추가
+Let's Encrypt 인증서 발급(HTTP-01 challenge)과 이후 HTTP→HTTPS 리다이렉트를
+위해 80번(HTTP)도 인바운드로 열어야 합니다. 인바운드 규칙 추가 시:
+- 타입: `HTTP` (프리셋에 있음) 또는 `USER`
+- 프로토콜: `TCP`, 포트: `80`, CIDR: `0.0.0.0/0`
+
+443(HTTPS)은 서버 생성 시 이미 인바운드 규칙에 포함되어 있어 별도 작업
+불필요합니다.
+
+### 8-4. 서버에 Nginx 설치 + 리버스 프록시 구성
+```bash
+sudo apt update && sudo apt install -y nginx
+```
+`/etc/nginx/sites-available/welli`에 아래 내용으로 설정 후 `sites-enabled`에
+심볼릭 링크 연결:
+```nginx
+server {
+    listen 80;
+    server_name api.welli.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+```bash
+sudo ln -s /etc/nginx/sites-available/welli /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### 8-5. Let's Encrypt 무료 SSL 인증서 발급 (Certbot)
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d api.welli.com
+```
+Certbot이 Nginx 설정을 자동으로 HTTPS(443)용으로 수정하고, 인증서 자동
+갱신 cron도 함께 등록해줍니다.
+
+### 8-6. 배포 설정 갱신
+- 서버 `welli.env`의 `CORS_ALLOWED_ORIGINS`에 프론트 운영 도메인 추가
+  (예: `CORS_ALLOWED_ORIGINS=http://localhost:3000,https://welli-frontend.vercel.app`)
+  → 수정 후 `docker compose --env-file welli.env up -d`로 재시작
+- 프론트팀에 최종 API 주소를 `https://api.welli.com`으로 전달
+- (선택) 외부에서 8080 직접 접근을 막고 싶으면, 가비아 보안그룹에서 8080
+  인바운드 규칙을 삭제하고 Nginx(80/443)를 통해서만 접근하도록 정리
+
+이 작업은 프론트 배포 일정이 확정되면 진행하면 되고, 그 전까지는 지금
+구성(IP + HTTP + CORS `localhost:3000` 허용) 그대로 유지하면 됩니다.
