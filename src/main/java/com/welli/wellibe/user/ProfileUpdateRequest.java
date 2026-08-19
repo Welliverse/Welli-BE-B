@@ -15,7 +15,7 @@ public record ProfileUpdateRequest(
         @NotBlank
         String gender,
 
-        @NotBlank
-        String healthGoal
+        @NotNull
+        HealthGoal healthGoal
 ) {
 }

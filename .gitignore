@@ -42,3 +42,6 @@ uploads/
 *.env
 
 *.properties
+
+# macOS Finder metadata
+.DS_Store
