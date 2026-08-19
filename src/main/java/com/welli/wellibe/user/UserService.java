@@ -24,7 +24,8 @@ public class UserService {
                 user.getNickname(),
                 user.getAge(),
                 user.getGender(),
-                user.getHealthGoal()
+                user.getHealthGoal(),
+                user.isOnboardingCompleted()
         );
     }
     @Transactional

@@ -38,6 +38,11 @@ public class User {
     @Enumerated(EnumType.STRING)
     private HealthGoal healthGoal;
 
+    // 온보딩 완료 여부
+    @Builder.Default
+    @Column(nullable = false)
+    private boolean onboardingCompleted = false;
+
     // 회원가입 시간
     @Column(nullable = false)
     private LocalDateTime createdAt;
@@ -54,5 +59,6 @@ public class User {
         this.age = age;
         this.gender = gender;
         this.healthGoal = healthGoal;
+        this.onboardingCompleted = true;
     }
 }
