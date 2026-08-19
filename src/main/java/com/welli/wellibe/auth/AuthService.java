@@ -17,7 +17,7 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
 
     @Transactional
-    public void signup(SignupRequest request) {
+    public SignupResponse signup(SignupRequest request) {
 
         // 이메일 중복 확인
         if (userRepository.existsByEmail(request.email())) {
@@ -32,7 +32,13 @@ public class AuthService {
                 .build();
 
         // DB 저장
-        userRepository.save(user);
+        User savedUser = userRepository.save(user);
+
+        return new SignupResponse(
+                savedUser.getId(),
+                savedUser.getEmail(),
+                savedUser.getNickname()
+        );
     }
 
     @Transactional(readOnly = true)
