@@ -1,0 +1,12 @@
+.git
+.gradle
+.idea
+build
+out
+uploads
+*.iml
+welli.env
+*.env
+Dockerfile
+docker-compose.yml
+.github

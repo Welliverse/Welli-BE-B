@@ -36,6 +36,9 @@ out/
 ### VS Code ###
 .vscode/
 
-src/main/resources/application.yml
-
 uploads/
+
+### .env ###
+*.env
+
+*.properties
