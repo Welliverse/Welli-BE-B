@@ -35,7 +35,8 @@ public class User {
     private String gender;
 
     // 건강 목표
-    private String healthGoal;
+    @Enumerated(EnumType.STRING)
+    private HealthGoal healthGoal;
 
     // 온보딩 완료 여부
     @Builder.Default
@@ -53,7 +54,7 @@ public class User {
     public void updateProfile(
             Integer age,
             String gender,
-            String healthGoal
+            HealthGoal healthGoal
     ) {
         this.age = age;
         this.gender = gender;

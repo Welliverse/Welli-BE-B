@@ -12,6 +12,6 @@ public class UserResponse {
     private String nickname;
     private Integer age;
     private String gender;
-    private String healthGoal;
+    private HealthGoal healthGoal;
     private boolean onboardingCompleted;
 }

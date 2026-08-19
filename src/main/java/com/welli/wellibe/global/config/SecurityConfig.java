@@ -1,6 +1,7 @@
 package com.welli.wellibe.global.config;
 
 import com.welli.wellibe.global.jwt.JwtAuthenticationFilter;
+import com.welli.wellibe.global.error.ApiErrorResponseWriter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -28,6 +29,26 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint((request, response, authException) ->
+                                ApiErrorResponseWriter.write(
+                                        response,
+                                        org.springframework.http.HttpStatus.UNAUTHORIZED,
+                                        "UNAUTHORIZED",
+                                        "인증이 필요하거나 토큰이 유효하지 않습니다.",
+                                        request.getRequestURI()
+                                )
+                        )
+                        .accessDeniedHandler((request, response, accessDeniedException) ->
+                                ApiErrorResponseWriter.write(
+                                        response,
+                                        org.springframework.http.HttpStatus.FORBIDDEN,
+                                        "FORBIDDEN",
+                                        "접근 권한이 없습니다.",
+                                        request.getRequestURI()
+                                )
+                        )
+                )
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(
                                 SessionCreationPolicy.STATELESS
