@@ -59,7 +59,8 @@ public class AuthService {
                 accessToken,
                 user.getId(),
                 user.getEmail(),
-                user.getNickname()
+                user.getNickname(),
+                user.isOnboardingCompleted()
         );
     }
 }
