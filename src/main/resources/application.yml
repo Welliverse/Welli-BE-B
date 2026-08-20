@@ -1,7 +1,4 @@
 spring:
-  config:
-    import: optional:file:./welli.env[.properties]
-
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
@@ -22,3 +19,7 @@ jwt:
 app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+
+openai:
+  api-key: ${OPENAI_API_KEY:}
+  model: ${OPENAI_MODEL:gpt-4o-mini}
