@@ -19,6 +19,7 @@ public class AnalysisService {
     private final CharacterRepository characterRepository;
     private final HealthRecordRepository healthRecordRepository;
     private final AnalysisResultRepository analysisResultRepository;
+    private final OpenAiFeedbackService openAiFeedbackService;
 
     @Transactional
     public AnalysisResponse run(String email) {
@@ -38,7 +39,14 @@ public class AnalysisService {
         character.updateCondition(beforeScore + delta);
 
         String summary = createSummary(delta);
-        String feedbackText = createFeedback(character.getConditionScore());
+        String fallbackFeedback = createFeedback(character.getConditionScore());
+        String feedbackText = openAiFeedbackService.createFeedback(
+                user.getHealthGoal(),
+                createRecordSummary(user.getId()),
+                character.getConditionScore(),
+                character.getConditionScore() - beforeScore,
+                fallbackFeedback
+        );
 
         AnalysisResult result = AnalysisResult.builder()
                 .user(user)
@@ -151,6 +159,29 @@ public class AnalysisService {
         }
 
         return "분석할 수 있는 건강 기록이 충분하지 않거나 컨디션 변화가 없습니다.";
+    }
+
+    private String createRecordSummary(Long userId) {
+        return "수면: " + getLatestValue(userId, HealthRecordType.SLEEP, "hours", "시간")
+                + ", 물 섭취: " + getLatestValue(userId, HealthRecordType.WATER, "ml", "ml")
+                + ", 스트레스: " + getLatestValue(userId, HealthRecordType.STRESS_EMOTION, "level", "단계");
+    }
+
+    private String getLatestValue(
+            Long userId,
+            HealthRecordType type,
+            String key,
+            String unit
+    ) {
+        HealthRecord record = healthRecordRepository
+                .findTopByUserIdAndTypeOrderByRecordedAtDesc(userId, type)
+                .orElse(null);
+
+        if (record == null || record.getValue().get(key) == null) {
+            return "기록 없음";
+        }
+
+        return record.getValue().get(key) + unit;
     }
 
     private String createFeedback(int conditionScore) {
