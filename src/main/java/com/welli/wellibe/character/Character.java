@@ -24,6 +24,10 @@ public class Character {
 
     private Integer growthStage;
 
+    @Getter(AccessLevel.NONE)
+    @Builder.Default
+    private Integer growthScore = 0;
+
     private Integer conditionScore;
 
     private String appearanceState;
@@ -49,5 +53,24 @@ public class Character {
         } else {
             this.appearanceState = "VERY_BAD";
         }
+    }
+
+    public int getGrowthScore() {
+        return growthScore == null ? 0 : growthScore;
+    }
+
+    /**
+     * Applies a long-term growth score change. Every 100 points advances one
+     * growth stage, and any overflow carries over to the next stage.
+     */
+    public void updateGrowthScore(int growthScoreDelta) {
+        int nextScore = Math.max(0, getGrowthScore() + growthScoreDelta);
+
+        while (nextScore >= 100) {
+            nextScore -= 100;
+            this.growthStage = (this.growthStage == null ? 1 : this.growthStage) + 1;
+        }
+
+        this.growthScore = nextScore;
     }
 }
