@@ -8,9 +8,13 @@ import com.welli.wellibe.record.HealthRecordType;
 import com.welli.wellibe.user.User;
 import com.welli.wellibe.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Map;
+
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AnalysisService {
@@ -19,7 +23,7 @@ public class AnalysisService {
     private final CharacterRepository characterRepository;
     private final HealthRecordRepository healthRecordRepository;
     private final AnalysisResultRepository analysisResultRepository;
-    private final OpenAiFeedbackService openAiFeedbackService;
+    private final AiAnalysisClient aiAnalysisClient;
 
     @Transactional
     public AnalysisResponse run(String email) {
@@ -34,24 +38,15 @@ public class AnalysisService {
                 );
 
         int beforeScore = character.getConditionScore();
-        int delta = calculateDelta(user.getId());
 
-        character.updateCondition(beforeScore + delta);
+        AiAnalysisResult aiResult = analyzeWithFallback(user.getId(), beforeScore);
 
-        String summary = createSummary(delta);
-        String fallbackFeedback = createFeedback(character.getConditionScore());
-        String feedbackText = openAiFeedbackService.createFeedback(
-                user.getHealthGoal(),
-                createRecordSummary(user.getId()),
-                character.getConditionScore(),
-                character.getConditionScore() - beforeScore,
-                fallbackFeedback
-        );
+        character.updateCondition(beforeScore + aiResult.conditionDelta());
 
         AnalysisResult result = AnalysisResult.builder()
                 .user(user)
-                .summary(summary)
-                .feedbackText(feedbackText)
+                .summary(aiResult.summary())
+                .feedbackText(aiResult.feedbackText())
                 .conditionDelta(character.getConditionScore() - beforeScore)
                 .build();
 
@@ -67,6 +62,7 @@ public class AnalysisService {
                 savedResult.getAnalyzedAt()
         );
     }
+
     @Transactional(readOnly = true)
     public AnalysisResponse getLatest(String email) {
         User user = userRepository.findByEmail(email)
@@ -94,6 +90,50 @@ public class AnalysisService {
                 character.getAppearanceState(),
                 result.getAnalyzedAt()
         );
+    }
+
+    /**
+     * Primary path: ask OpenAI to judge the condition delta + write the copy.
+     * If that call fails for any reason (no API key, network error, rate
+     * limit, bad response), fall back to the old rule-based logic so
+     * /analysis/run never breaks.
+     */
+    private AiAnalysisResult analyzeWithFallback(Long userId, int currentConditionScore) {
+        AiAnalysisRequest request = buildAiRequest(userId, currentConditionScore);
+
+        try {
+            return aiAnalysisClient.analyze(request);
+        } catch (Exception e) {
+            log.warn("OpenAI 분석 실패, 규칙 기반 분석으로 대체합니다. userId={}", userId, e);
+            return fallbackAnalyze(userId);
+        }
+    }
+
+    private AiAnalysisRequest buildAiRequest(Long userId, int currentConditionScore) {
+        return new AiAnalysisRequest(
+                currentConditionScore,
+                latestValue(userId, HealthRecordType.SLEEP),
+                latestValue(userId, HealthRecordType.WATER),
+                latestValue(userId, HealthRecordType.STRESS_EMOTION),
+                latestValue(userId, HealthRecordType.EXERCISE),
+                latestValue(userId, HealthRecordType.MEAL)
+        );
+    }
+
+    private Map<String, Object> latestValue(Long userId, HealthRecordType type) {
+        return healthRecordRepository
+                .findTopByUserIdAndTypeOrderByRecordedAtDesc(userId, type)
+                .map(HealthRecord::getValue)
+                .orElse(null);
+    }
+
+    // ---- Rule-based fallback (used only if the OpenAI call fails) ----
+
+    private AiAnalysisResult fallbackAnalyze(Long userId) {
+        int delta = calculateDelta(userId);
+        String summary = createSummary(delta);
+        String feedbackText = createFeedback(delta);
+        return new AiAnalysisResult(delta, summary, feedbackText);
     }
 
     private int calculateDelta(Long userId) {
@@ -161,42 +201,15 @@ public class AnalysisService {
         return "분석할 수 있는 건강 기록이 충분하지 않거나 컨디션 변화가 없습니다.";
     }
 
-    private String createRecordSummary(Long userId) {
-        return "수면: " + getLatestValue(userId, HealthRecordType.SLEEP, "hours", "시간")
-                + ", 물 섭취: " + getLatestValue(userId, HealthRecordType.WATER, "ml", "ml")
-                + ", 스트레스: " + getLatestValue(userId, HealthRecordType.STRESS_EMOTION, "level", "단계");
-    }
-
-    private String getLatestValue(
-            Long userId,
-            HealthRecordType type,
-            String key,
-            String unit
-    ) {
-        HealthRecord record = healthRecordRepository
-                .findTopByUserIdAndTypeOrderByRecordedAtDesc(userId, type)
-                .orElse(null);
-
-        if (record == null || record.getValue().get(key) == null) {
-            return "기록 없음";
+    private String createFeedback(int delta) {
+        if (delta > 0) {
+            return "오늘의 웰리는 컨디션이 좋아지고 있어요. 이 리듬을 유지해 보세요!";
         }
 
-        return record.getValue().get(key) + unit;
-    }
-
-    private String createFeedback(int conditionScore) {
-        if (conditionScore >= 80) {
-            return "오늘의 웰리는 매우 좋은 컨디션이에요. 이 리듬을 유지해 보세요!";
+        if (delta < 0) {
+            return "오늘의 웰리가 조금 지쳐 있어요. 수면과 수분 섭취를 챙겨 주세요.";
         }
 
-        if (conditionScore >= 60) {
-            return "오늘의 웰리는 안정적인 컨디션이에요. 작은 건강 습관을 이어가 보세요.";
-        }
-
-        if (conditionScore >= 40) {
-            return "오늘의 웰리는 조금 지쳐 있어요. 수면과 수분 섭취를 챙겨 주세요.";
-        }
-
-        return "오늘의 웰리가 많이 지쳐 있어요. 충분한 휴식과 작은 실천부터 시작해 보세요.";
+        return "오늘의 웰리는 평온한 상태예요. 작은 건강 습관을 이어가 보세요.";
     }
 }

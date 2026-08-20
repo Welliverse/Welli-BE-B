@@ -69,13 +69,20 @@ docker exec -it welli-mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" welli'
 > 자동으로 안 바뀌니, `Access denied` 에러 나면 이 부분부터 의심하세요.
 > 자세한 내용과 GUI 툴(DBeaver 등) 연결 방법은 `DEPLOYMENT.md` 7번 참고.
 
-## 7. (예정) 도메인/HTTPS 전환
+## 7. OpenAI 기반 캐릭터 분석
+
+`/analysis/run`은 건강 기록 + 현재 컨디션 점수를 OpenAI에 보내서 점수 변화량과
+요약/피드백 문구를 받아옵니다. `OPENAI_API_KEY`가 `welli.env`에 없거나 API 호출이
+실패해도 자동으로 규칙 기반 분석으로 대체되니 앱이 죽지는 않습니다. 자세한 구조와
+환경변수는 `DEPLOYMENT.md` 10번 항목 참고.
+
+## 8. (예정) 도메인/HTTPS 전환
 
 프론트팀 배포(HTTPS)가 완료되면 백엔드도 도메인 연결 + Nginx + Let's Encrypt로
 HTTPS 전환이 필요합니다. 순서/명령어는 `DEPLOYMENT.md` 9번 항목에 미리 정리해
 뒀으니, 프론트 배포 일정 잡히면 그대로 따라 진행하면 됩니다.
 
-## 8. 막히면
+## 9. 막히면
 
 `DEPLOYMENT.md`의 "자주 발생하는 문제" 표를 먼저 확인하고, 그래도 안 풀리면
 Actions 로그 + `docker compose logs app` 결과를 같이 공유해주세요.
