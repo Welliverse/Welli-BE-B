@@ -31,6 +31,8 @@ public class AnalysisResult {
     @Column(nullable = false)
     private Integer conditionDelta;
 
+    private Integer growthScoreDelta;
+
     @Column(nullable = false)
     private LocalDateTime analyzedAt;
 

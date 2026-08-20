@@ -28,6 +28,7 @@ public class CharacterService {
         Character character = Character.builder()
                 .user(user)
                 .growthStage(1)
+                .growthScore(0)
                 .conditionScore(50)
                 .appearanceState("NORMAL")
                 .build();
@@ -57,6 +58,7 @@ public class CharacterService {
         return new CharacterResponse(
                 character.getId(),
                 character.getGrowthStage(),
+                character.getGrowthScore(),
                 character.getConditionScore(),
                 character.getAppearanceState()
         );

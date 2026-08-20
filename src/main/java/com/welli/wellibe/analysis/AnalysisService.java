@@ -39,15 +39,21 @@ public class AnalysisService {
 
         int beforeScore = character.getConditionScore();
 
-        AiAnalysisResult aiResult = analyzeWithFallback(user.getId(), beforeScore);
+        AiAnalysisResult aiResult = analyzeWithFallback(
+                user.getId(),
+                beforeScore,
+                character.getGrowthScore()
+        );
 
         character.updateCondition(beforeScore + aiResult.conditionDelta());
+        character.updateGrowthScore(aiResult.growthScoreDelta());
 
         AnalysisResult result = AnalysisResult.builder()
                 .user(user)
                 .summary(aiResult.summary())
                 .feedbackText(aiResult.feedbackText())
                 .conditionDelta(character.getConditionScore() - beforeScore)
+                .growthScoreDelta(aiResult.growthScoreDelta())
                 .build();
 
         AnalysisResult savedResult = analysisResultRepository.save(result);
@@ -58,6 +64,9 @@ public class AnalysisService {
                 savedResult.getFeedbackText(),
                 savedResult.getConditionDelta(),
                 character.getConditionScore(),
+                savedResult.getGrowthScoreDelta(),
+                character.getGrowthScore(),
+                character.getGrowthStage(),
                 character.getAppearanceState(),
                 savedResult.getAnalyzedAt()
         );
@@ -87,6 +96,9 @@ public class AnalysisService {
                 result.getFeedbackText(),
                 result.getConditionDelta(),
                 character.getConditionScore(),
+                result.getGrowthScoreDelta(),
+                character.getGrowthScore(),
+                character.getGrowthStage(),
                 character.getAppearanceState(),
                 result.getAnalyzedAt()
         );
@@ -98,8 +110,12 @@ public class AnalysisService {
      * limit, bad response), fall back to the old rule-based logic so
      * /analysis/run never breaks.
      */
-    private AiAnalysisResult analyzeWithFallback(Long userId, int currentConditionScore) {
-        AiAnalysisRequest request = buildAiRequest(userId, currentConditionScore);
+    private AiAnalysisResult analyzeWithFallback(
+            Long userId,
+            int currentConditionScore,
+            int currentGrowthScore
+    ) {
+        AiAnalysisRequest request = buildAiRequest(userId, currentConditionScore, currentGrowthScore);
 
         try {
             return aiAnalysisClient.analyze(request);
@@ -109,9 +125,14 @@ public class AnalysisService {
         }
     }
 
-    private AiAnalysisRequest buildAiRequest(Long userId, int currentConditionScore) {
+    private AiAnalysisRequest buildAiRequest(
+            Long userId,
+            int currentConditionScore,
+            int currentGrowthScore
+    ) {
         return new AiAnalysisRequest(
                 currentConditionScore,
+                currentGrowthScore,
                 latestValue(userId, HealthRecordType.SLEEP),
                 latestValue(userId, HealthRecordType.WATER),
                 latestValue(userId, HealthRecordType.STRESS_EMOTION),
@@ -133,7 +154,8 @@ public class AnalysisService {
         int delta = calculateDelta(userId);
         String summary = createSummary(delta);
         String feedbackText = createFeedback(delta);
-        return new AiAnalysisResult(delta, summary, feedbackText);
+        int growthScoreDelta = Integer.compare(delta, 0) * 2;
+        return new AiAnalysisResult(delta, growthScoreDelta, summary, feedbackText);
     }
 
     private int calculateDelta(Long userId) {

@@ -72,7 +72,7 @@ public class RoutineService {
                         new IllegalArgumentException("캐릭터가 존재하지 않습니다.")
                 );
 
-        character.updateCondition(character.getConditionScore() + 5);
+        character.updateGrowthScore(5);
 
         return toResponse(routine);
     }

@@ -9,6 +9,7 @@ public class CharacterResponse {
 
     private Long characterId;
     private Integer growthStage;
+    private Integer growthScore;
     private Integer conditionScore;
     private String appearanceState;
 }
