@@ -40,8 +40,13 @@ application.yml                  │
    DB_PASSWORD=본인_로컬_MySQL_비밀번호
    JWT_SECRET=welli-jwt-secret-key-must-be-longer-than-32-bytes
    JWT_EXPIRATION_MS=3600000
+   OPENAI_API_KEY=본인_OpenAI_API_키
+   OPENAI_MODEL=gpt-4o-mini
    EOF
    ```
+   `OPENAI_API_KEY`를 비워두거나 아예 안 넣어도 앱은 정상 실행됩니다 — `/analysis/run`
+   호출 시 OpenAI 분석이 실패하면 자동으로 규칙 기반 분석으로 대체(fallback)되도록
+   되어 있습니다 (아래 10번 참고).
 
 3. 로컬에 MySQL 설치 후 `welli` 데이터베이스 생성
 
@@ -108,6 +113,8 @@ DB_USERNAME=root
 DB_PASSWORD=강력한_운영용_비밀번호
 JWT_SECRET=강력한_운영용_JWT_시크릿
 JWT_EXPIRATION_MS=3600000
+OPENAI_API_KEY=운영용_OpenAI_API_키
+OPENAI_MODEL=gpt-4o-mini
 EOF
 chmod 600 welli.env
 ```
@@ -213,19 +220,19 @@ ssh -i welliKeyPair.pem -L 3306:localhost:3306 ubuntu@1.201.116.47
 Content 정책 때문에 백엔드도 HTTPS로 응답해야 프론트에서 정상 호출할 수
 있습니다. 프론트 배포 일정이 잡히면 아래 순서로 진행합니다.
 
-### 8-1. 도메인 준비
+### 9-1. 도메인 준비
 - 가비아에서 도메인 구매(가비아는 원래 도메인 등록 서비스가 주력이라 절차가
   간단함) 또는 팀에서 이미 보유한 도메인 사용
 - API용 서브도메인 하나 결정 (예: `api.welli.com`)
 
-### 8-2. DNS 연결
+### 9-2. DNS 연결
 - 도메인 관리 콘솔(가비아 My가비아 등)에서 A 레코드 추가
   - 호스트: `api` (서브도메인)
   - 값: `1.201.116.47` (서버 공인 IP)
 - 전파까지 최대 몇 시간 걸릴 수 있음, `dig api.welli.com` 또는
   `nslookup api.welli.com`으로 확인 가능
 
-### 8-3. 가비아 보안그룹에 80번 포트 추가
+### 9-3. 가비아 보안그룹에 80번 포트 추가
 Let's Encrypt 인증서 발급(HTTP-01 challenge)과 이후 HTTP→HTTPS 리다이렉트를
 위해 80번(HTTP)도 인바운드로 열어야 합니다. 인바운드 규칙 추가 시:
 - 타입: `HTTP` (프리셋에 있음) 또는 `USER`
@@ -234,7 +241,7 @@ Let's Encrypt 인증서 발급(HTTP-01 challenge)과 이후 HTTP→HTTPS 리다�
 443(HTTPS)은 서버 생성 시 이미 인바운드 규칙에 포함되어 있어 별도 작업
 불필요합니다.
 
-### 8-4. 서버에 Nginx 설치 + 리버스 프록시 구성
+### 9-4. 서버에 Nginx 설치 + 리버스 프록시 구성
 ```bash
 sudo apt update && sudo apt install -y nginx
 ```
@@ -259,7 +266,7 @@ sudo ln -s /etc/nginx/sites-available/welli /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-### 8-5. Let's Encrypt 무료 SSL 인증서 발급 (Certbot)
+### 9-5. Let's Encrypt 무료 SSL 인증서 발급 (Certbot)
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d api.welli.com
@@ -267,7 +274,7 @@ sudo certbot --nginx -d api.welli.com
 Certbot이 Nginx 설정을 자동으로 HTTPS(443)용으로 수정하고, 인증서 자동
 갱신 cron도 함께 등록해줍니다.
 
-### 8-6. 배포 설정 갱신
+### 9-6. 배포 설정 갱신
 - 서버 `welli.env`의 `CORS_ALLOWED_ORIGINS`에 프론트 운영 도메인 추가
   (예: `CORS_ALLOWED_ORIGINS=http://localhost:3000,https://welli-frontend.vercel.app`)
   → 수정 후 `docker compose --env-file welli.env up -d`로 재시작
@@ -277,3 +284,39 @@ Certbot이 Nginx 설정을 자동으로 HTTPS(443)용으로 수정하고, 인증
 
 이 작업은 프론트 배포 일정이 확정되면 진행하면 되고, 그 전까지는 지금
 구성(IP + HTTP + CORS `localhost:3000` 허용) 그대로 유지하면 됩니다.
+
+## 10. OpenAI 기반 캐릭터 분석 기능
+
+`POST /analysis/run`은 사용자의 최근 건강 기록(수면/수분/스트레스/운동/식사)과
+현재 캐릭터 컨디션 점수를 OpenAI(Chat Completions, Structured Outputs)에 보내서
+컨디션 점수 변화량(`conditionDelta`), 요약(`summary`), 캐릭터 말투 피드백
+(`feedbackText`)을 한 번에 받아옵니다. 관련 코드는 `analysis` 패키지의
+`AiAnalysisClient`, `AiAnalysisRequest`, `AiAnalysisResult`, 그리고 OpenAI 호출용
+`RestClient` 빈을 등록하는 `global/config/OpenAiClientConfig`에 있습니다.
+
+### 10-1. 필요한 환경변수
+| 변수 | 설명 | 기본값 |
+|---|---|---|
+| `OPENAI_API_KEY` | OpenAI API 키 (https://platform.openai.com/api-keys 에서 발급) | 없음(빈 문자열) |
+| `OPENAI_MODEL` | 사용할 모델 | `gpt-4o-mini` |
+
+로컬은 `welli.env`, 서버는 `~/welli/welli.env`에 추가하면 됩니다 (2번, 5-2번 참고).
+
+### 10-2. 실패 시 자동 대체(fallback)
+`OPENAI_API_KEY`가 비어있거나, API 호출이 실패하거나(네트워크 오류, 401, 429
+rate limit 등), 응답 파싱에 실패하면 `AnalysisService`가 예외를 잡아서 예전
+방식의 규칙 기반 분석(수면/수분/스트레스 값을 단순 점수 가감)으로 자동
+대체합니다. 즉 **API 키를 안 넣어도 `/analysis/run`은 항상 정상 응답합니다** —
+다만 그 경우 결과가 OpenAI가 아닌 규칙 기반으로 나옵니다. 실패 원인은
+서버 로그(`docker compose --env-file welli.env logs app`)에 `OpenAI 분석 실패,
+규칙 기반 분석으로 대체합니다` 로 남습니다.
+
+### 10-3. 비용/속도 참고
+- `gpt-4o-mini`는 OpenAI 모델 중 저렴한 축이라 해커톤 데모 용도로는 비용
+  부담이 크지 않습니다. 다만 무료가 아니므로, API 키에 사용량 제한(빌링 한도)을
+  걸어두는 걸 권장합니다.
+- 요청마다 응답까지 보통 1~3초 정도 걸립니다. `OpenAiClientConfig`에 읽기
+  타임아웃 20초로 설정돼 있어, 그보다 오래 걸리면 타임아웃 처리 후 위 10-2
+  fallback으로 넘어갑니다.
+- API 키가 유출되지 않도록 항상 `welli.env`(gitignore됨)에만 넣고, 코드에
+  하드코딩하지 마세요.
