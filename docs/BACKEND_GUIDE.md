@@ -76,11 +76,13 @@ docker exec -it welli-mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" welli'
 실패해도 자동으로 규칙 기반 분석으로 대체되니 앱이 죽지는 않습니다. 자세한 구조와
 환경변수는 `DEPLOYMENT.md` 10번 항목 참고.
 
-## 8. (예정) 도메인/HTTPS 전환
+## 8. 도메인/HTTPS 전환
 
-프론트팀 배포(HTTPS)가 완료되면 백엔드도 도메인 연결 + Nginx + Let's Encrypt로
-HTTPS 전환이 필요합니다. 순서/명령어는 `DEPLOYMENT.md` 9번 항목에 미리 정리해
-뒀으니, 프론트 배포 일정 잡히면 그대로 따라 진행하면 됩니다.
+프론트팀 배포(`https://welli-fe-a.vercel.app`)가 완료되어, 백엔드도
+`api.hellofriend-eulji.site` 도메인 연결 + Nginx + Let's Encrypt로 HTTPS
+전환을 진행합니다. 상세 순서/명령어는 `DEPLOYMENT.md` 9번 항목 참고.
+전환 완료 후 API 주소는 `https://api.hellofriend-eulji.site`로 변경됩니다
+(기존 `http://1.201.116.47:8080`은 이후 폐쇄 예정).
 
 ## 9. 막히면
 

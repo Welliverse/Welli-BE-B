@@ -213,24 +213,23 @@ ssh -i welliKeyPair.pem -L 3306:localhost:3306 ubuntu@1.201.116.47
 | `'url' must start with "jdbc"` 에러로 앱/테스트 실패 | `welli.env`의 값이 실제 환경변수로 주입 안 됨 | 로컬은 IntelliJ EnvFile 플러그인 연결 확인, 터미널은 `export` 필요, 서버는 `--env-file welli.env` 필요 |
 | `docker exec`로 mysql 접속 시 `Access denied for user 'root'@'localhost'` | 비밀번호 오타, 또는 컨테이너 최초 생성 이후 `welli.env`의 `DB_PASSWORD`만 바꾸고 컨테이너는 재생성 안 함 | 위 7번의 `$MYSQL_ROOT_PASSWORD` 방식으로 재시도. 그래도 안 되면 최초 생성 당시 비밀번호가 뭐였는지 확인하거나, 테스트 데이터라면 볼륨(`welli_mysql_data`) 삭제 후 재생성 |
 
-## 9. (예정) 도메인 연결 및 HTTPS 전환
+## 9. 도메인 연결 및 HTTPS 전환
 
-현재는 `http://1.201.116.47:8080`처럼 IP + 포트로 직접 서비스하고 있습니다.
-**프론트팀 배포(Vercel/Netlify 등 HTTPS)가 완료되면**, 브라우저의 Mixed
+프론트팀 배포(`https://welli-fe-a.vercel.app`)가 완료되어, 브라우저의 Mixed
 Content 정책 때문에 백엔드도 HTTPS로 응답해야 프론트에서 정상 호출할 수
-있습니다. 프론트 배포 일정이 잡히면 아래 순서로 진행합니다.
+있습니다. 사용 도메인은 `hellofriend-eulji.site` (보유 도메인), API용
+서브도메인은 `api.hellofriend-eulji.site`로 진행합니다.
 
 ### 9-1. 도메인 준비
-- 가비아에서 도메인 구매(가비아는 원래 도메인 등록 서비스가 주력이라 절차가
-  간단함) 또는 팀에서 이미 보유한 도메인 사용
-- API용 서브도메인 하나 결정 (예: `api.welli.com`)
+- 도메인: `hellofriend-eulji.site` (이미 보유)
+- API용 서브도메인: `api.hellofriend-eulji.site`
 
 ### 9-2. DNS 연결
-- 도메인 관리 콘솔(가비아 My가비아 등)에서 A 레코드 추가
+- 도메인 관리 콘솔에서 A 레코드 추가
   - 호스트: `api` (서브도메인)
   - 값: `1.201.116.47` (서버 공인 IP)
-- 전파까지 최대 몇 시간 걸릴 수 있음, `dig api.welli.com` 또는
-  `nslookup api.welli.com`으로 확인 가능
+- 전파까지 최대 몇 시간 걸릴 수 있음, `dig api.hellofriend-eulji.site` 또는
+  `nslookup api.hellofriend-eulji.site`으로 확인 가능
 
 ### 9-3. 가비아 보안그룹에 80번 포트 추가
 Let's Encrypt 인증서 발급(HTTP-01 challenge)과 이후 HTTP→HTTPS 리다이렉트를
@@ -250,7 +249,7 @@ sudo apt update && sudo apt install -y nginx
 ```nginx
 server {
     listen 80;
-    server_name api.welli.com;
+    server_name api.hellofriend-eulji.site;
 
     location / {
         proxy_pass http://127.0.0.1:8080;
@@ -269,21 +268,18 @@ sudo nginx -t && sudo systemctl reload nginx
 ### 9-5. Let's Encrypt 무료 SSL 인증서 발급 (Certbot)
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d api.welli.com
+sudo certbot --nginx -d api.hellofriend-eulji.site
 ```
 Certbot이 Nginx 설정을 자동으로 HTTPS(443)용으로 수정하고, 인증서 자동
 갱신 cron도 함께 등록해줍니다.
 
 ### 9-6. 배포 설정 갱신
-- 서버 `welli.env`의 `CORS_ALLOWED_ORIGINS`에 프론트 운영 도메인 추가
-  (예: `CORS_ALLOWED_ORIGINS=http://localhost:3000,https://welli-frontend.vercel.app`)
+- 서버 `welli.env`의 `CORS_ALLOWED_ORIGINS`에 프론트 운영 도메인 확인/추가
+  (`CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,https://welli-fe-a.vercel.app`)
   → 수정 후 `docker compose --env-file welli.env up -d`로 재시작
-- 프론트팀에 최종 API 주소를 `https://api.welli.com`으로 전달
+- 프론트팀에 최종 API 주소를 `https://api.hellofriend-eulji.site`로 전달
 - (선택) 외부에서 8080 직접 접근을 막고 싶으면, 가비아 보안그룹에서 8080
   인바운드 규칙을 삭제하고 Nginx(80/443)를 통해서만 접근하도록 정리
-
-이 작업은 프론트 배포 일정이 확정되면 진행하면 되고, 그 전까지는 지금
-구성(IP + HTTP + CORS `localhost:3000` 허용) 그대로 유지하면 됩니다.
 
 ## 10. OpenAI 기반 캐릭터 분석 기능
 
