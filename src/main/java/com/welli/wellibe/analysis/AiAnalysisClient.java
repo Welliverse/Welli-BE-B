@@ -31,11 +31,13 @@ public class AiAnalysisClient {
     private static final String SYSTEM_PROMPT = """
             당신은 웰니스 앱 'Welli'의 건강 데이터 분석기입니다.
             사용자의 최근 수면/수분/스트레스/운동/식사 기록과 현재 캐릭터 컨디션
-            점수(0~100)를 보고 다음 세 가지를 한국어로 생성하세요.
+            점수(0~100)와 성장 점수(0~99)를 보고 다음 네 가지를 한국어로 생성하세요.
             1. conditionDelta: 컨디션 점수 변화량. -20 ~ +20 사이의 정수.
                기록이 좋으면 양수, 나쁘면 음수, 기록이 거의 없으면 0에 가깝게.
-            2. summary: 이번 분석 결과를 한두 문장으로 요약 (사용자에게 보여줄 문장).
-            3. feedbackText: 캐릭터가 사용자에게 말하듯 다정하게 건네는 조언/격려 메시지.
+            2. growthScoreDelta: 장기 성장 점수 변화량. -5 ~ +10 사이의 정수.
+               건강 습관이 꾸준히 좋으면 양수, 좋지 않으면 음수, 데이터가 부족하면 0.
+            3. summary: 이번 분석 결과를 한두 문장으로 요약 (사용자에게 보여줄 문장).
+            4. feedbackText: 캐릭터가 사용자에게 말하듯 다정하게 건네는 조언/격려 메시지.
             데이터가 부족한 항목은 무리하게 추측하지 말고 있는 정보만 근거로 판단하세요.
             """;
 
@@ -52,6 +54,10 @@ public class AiAnalysisClient {
                                             "type", "integer",
                                             "description", "컨디션 점수 변화량 (-20 ~ +20 정수)"
                                     ),
+                                    "growthScoreDelta", Map.of(
+                                            "type", "integer",
+                                            "description", "성장 점수 변화량 (-5 ~ +10 정수)"
+                                    ),
                                     "summary", Map.of(
                                             "type", "string",
                                             "description", "분석 결과 한두 문장 요약 (한국어)"
@@ -61,7 +67,7 @@ public class AiAnalysisClient {
                                             "description", "캐릭터 말투의 조언/격려 메시지 (한국어)"
                                     )
                             ),
-                            "required", List.of("conditionDelta", "summary", "feedbackText"),
+                            "required", List.of("conditionDelta", "growthScoreDelta", "summary", "feedbackText"),
                             "additionalProperties", false
                     )
             )
@@ -101,6 +107,7 @@ public class AiAnalysisClient {
 
             return new AiAnalysisResult(
                     parsed.path("conditionDelta").asInt(0),
+                    parsed.path("growthScoreDelta").asInt(0),
                     parsed.path("summary").asText(""),
                     parsed.path("feedbackText").asText("")
             );
@@ -114,6 +121,7 @@ public class AiAnalysisClient {
     private String buildUserPrompt(AiAnalysisRequest request) {
         StringBuilder sb = new StringBuilder();
         sb.append("현재 컨디션 점수: ").append(request.currentConditionScore()).append("\n");
+        sb.append("현재 성장 점수: ").append(request.currentGrowthScore()).append("\n");
         appendRecord(sb, "수면", request.sleep());
         appendRecord(sb, "수분 섭취", request.water());
         appendRecord(sb, "스트레스/감정", request.stressEmotion());
